@@ -1,0 +1,2416 @@
+<!DOCTYPE html>
+
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>神树遗契查卡器</title>
+<link href="https://fonts.googleapis.com/css2?family=Uncial+Antiqua&amp;family=Cinzel:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://unpkg.com/pixi.js/dist/browser/pixi.min.js"></script>
+<script src="https://unpkg.com/@pixi/filter-advanced-bloom/dist/browser/filter-advanced-bloom.min.js"></script>
+<script src="https://unpkg.com/@pixi/filter-godray/dist/browser/filter-godray.min.js"></script>
+<style>
+    :root{
+      /* === 背景基色：RGB(13,23,18) === */
+      --bg-base:#0f1a13;
+      --bg-deep:#0f1a13;
+      --bg-deeper:#0b1410;
+      --bg-graphite:#10251a; /* slight green */
+      --bg-slate:#183222;
+      --gold:#B08D57;
+      --gold-2:#9c7b3f;
+      --parchment:#E7E3D4;
+      --glass:rgba(22, 34, 25, 0.60);
+      --glass-border:rgba(176, 141, 87, 0.35);
+      --sidebar-w: 340px;
+      --gap: 24px;
+      --outer-pad: 22px;
+    }
+    *{ box-sizing: border-box; }
+    html, body {height:100%;
+      background: radial-gradient(1200px 600px at 70% -10%, #183222 0%, transparent 60%),
+        radial-gradient(1000px 500px at -10% 110%, #10251a 0%, transparent 60%),
+        var(--bg-base);
+}
+    body {
+      margin:0;
+      font-family: "Cinzel", "Uncial Antiqua", Georgia, serif;
+      color: var(--parchment);
+      background:
+        radial-gradient(1200px 900px at 15% -10%, var(--bg-slate), var(--bg-deeper) 60%),
+        radial-gradient(1200px 1200px at 85% 110%, var(--bg-graphite), var(--bg-deep) 64%),
+        linear-gradient(180deg, var(--bg-base), #0b1510);
+      overflow: hidden; /* fixed layout */
+    }
+    /* Vignette + subtle line texture */
+    body::before{
+      content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+      background:
+        radial-gradient(1200px 800px at 50% 8%, rgba(32,60,48,0.08), transparent 60%),
+        radial-gradient(1200px 800px at 50% 120%, rgba(14,24,19,0.22), transparent 62%);
+      mix-blend-mode: soft-light;
+    }
+    body::after{
+      content:""; position:fixed; inset:0; z-index:1; pointer-events:none;
+      background: repeating-linear-gradient( 0deg, rgba(255,255,255,0.01), rgba(255,255,255,0.01) 2px, transparent 2px, transparent 4px );
+      mix-blend-mode: soft-light;
+      opacity: .2;
+    }
+    #bg-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+    /* Fixed sidebar fills viewport height */
+    .sidebar-wrap{
+      position: fixed;
+      top: var(--outer-pad);
+      bottom: var(--outer-pad);
+      left: var(--outer-pad);
+      width: var(--sidebar-w);
+      z-index: 2;
+    }
+    .sidebar{
+      height: 100%;
+      overflow: auto;
+      padding: 16px 16px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      backdrop-filter: blur(16px) saturate(150%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+      box-shadow: 0 14px 36px rgba(0,0,0,0.48), inset 0 0 24px rgba(212,175,55,0.05);
+      position: relative;
+    }
+    .sidebar::before{
+      content:"";
+      position:absolute; inset:0; border-radius:16px; pointer-events:none;
+      background:
+        radial-gradient(600px 220px at 20% -10%, rgba(255,236,179,0.10), transparent 62%),
+        linear-gradient(180deg, rgba(255,255,255,0.02), transparent 40%);
+    }
+    .brand { display:flex; align-items:center; justify-content:center; margin: 2px 0 6px; }
+    .brand img.logo{ height: 108px; width: auto; filter: drop-shadow(0 6px 16px rgba(0,0,0,0.55)); }
+    h2.title { font-family: "Uncial Antiqua", serif; color: var(--gold); text-align:center; margin: 6px 0 8px; letter-spacing: 1px; }
+    .filter-category { margin: 14px 8px; }
+    .filter-category label { display:block; margin-bottom: 6px; color: var(--gold); font-size: 14px; }
+    .filter-category select {
+      width:100%; padding:12px; border-radius: 12px; border:1px solid var(--gold-2);
+      background: rgba(0,0,0,0.28); color: #fff; outline:none; box-shadow: inset 0 0 8px rgba(0,0,0,0.42);
+    }
+
+    /* Right fixed column; only card list scrolls */
+    .right{
+      position: fixed;
+      top: var(--outer-pad);
+      bottom: var(--outer-pad);
+      left: calc(var(--outer-pad) + var(--sidebar-w) + var(--gap));
+      right: var(--outer-pad);
+      display: flex;
+      flex-direction: column;
+      z-index: 2;
+    }
+    .content-panel{
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      backdrop-filter: blur(16px) saturate(150%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+      box-shadow: 0 14px 36px rgba(0,0,0,0.48), inset 0 0 24px rgba(212,175,55,0.05);
+      overflow: hidden;
+      padding: 8px 12px;
+    }
+.content-header{
+  padding: 0;
+  min-height: 56px;
+}
+.content-header img{
+  display: block;
+  width: 100%;
+  height: 56px;
+  object-fit: cover;
+  margin: 0;
+  filter: drop-shadow(0 6px 16px rgba(0,0,0,0.5));
+
+  pointer-events: none;
+  position: relative;
+  z-index: 1;
+}
+    .glow-line{ height:1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: .55; margin-bottom: 6px; }
+
+    .cards-scroll{
+      flex: 1;
+      overflow: auto;
+      padding: 10px 30px 14px;
+    }
+    .card-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 22px; }
+
+    .card {
+      background: rgba(18, 18, 20, 0.58);
+      border: 3px solid rgba(212,175,55,0.4);
+      border-radius: 14px;
+      overflow:hidden; cursor: pointer; position: relative;
+      transition: box-shadow .22s ease, border-color .22s ease, filter .22s ease;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.5);
+      isolation: isolate;
+      will-change: transform;
+    }
+    .card::before{ content:""; position:absolute; left:0; right:0; top:0; height:40px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent); pointer-events:none; }
+    .card:hover{
+      box-shadow: 0 18px 42px rgba(0,0,0,0.6), 0 0 0 1px rgba(212,175,55,0.32) inset;
+      border-color: rgba(212,175,55,0.68); filter: brightness(1.05);
+    }
+    :root { --card-lr-gap: 0px; }
+    .card-img{
+      display: block;
+      width: calc(100% - var(--card-lr-gap) * 2);
+      margin: 0 var(--card-lr-gap);
+      height: auto;
+      object-fit: contain;
+      max-height: 360px;
+      background: radial-gradient(180px 110px at 50% 8%, rgba(255,255,255,0.09), transparent 60%);
+    }
+    .card-info { padding: 12px 12px 16px; text-align:center; }
+    .card-info h3 { font-size: 18px; margin: 8px 0 6px; color: var(--gold); font-family: "Uncial Antiqua", serif; }
+    .card-info p { font-size: 13px; margin: 6px 0; color: #d8ccb0; }
+    .rarity { color: #ffe27a; font-weight: 600; }
+
+    .pagination{
+      padding: 6px 0 10px;
+      display:flex; flex-wrap: wrap;
+      align-items: center; justify-content:center; gap:10px;
+    }
+    .pagination button{
+      background: rgba(0,0,0,0.35); color: #fff; border:1px solid var(--gold-2);
+      padding: 10px 16px; border-radius:10px; cursor: pointer; transition: background .25s ease, transform .2s ease;
+    }
+    .pagination button:hover { background: rgba(212,175,55,0.18); transform: translateY(-2px); }
+    .pagination button:disabled { opacity:.5; cursor:not-allowed; }
+    .page-numbers { display:flex; gap:6px; flex-wrap: wrap; align-items:center; }
+    .page-numbers .num { padding: 8px 12px; border-radius:10px; border:1px solid var(--gold-2); background: rgba(0,0,0,0.35); cursor:pointer; }
+    .page-numbers .num.active{ box-shadow: 0 0 0 1px rgba(212,175,55,0.5) inset; background: rgba(212,175,55,0.12); }
+    .page-info{ font-size: 12px; opacity: .85; padding: 0 6px; }
+
+    @media (max-width: 1100px){
+      :root{ --sidebar-w: 300px; --gap: 16px; --outer-pad: 14px; }
+      .brand img.logo{ height: 90px; }
+      .content-header img{ height: 44px; 
+  pointer-events: none;
+  position: relative;
+  z-index: 1;
+}
+      .cards-scroll{ padding: 8px 12px 12px; }
+    }
+  
+/* === Hover FX overlay (gold+green sparks & hearthstone glow) === */
+.card{ position: relative; }
+.card-fx{ position:absolute; inset:-8px; pointer-events:none; z-index:9; }
+
+/* === 大图弹窗（遮罩+居中） === */
+#image-modal{
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.78);  /* 周围变暗 */
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+  padding: 4vh 4vw;
+}
+#image-modal.open{
+  opacity: 1;
+  pointer-events: auto;
+}
+#image-modal .modal-inner{
+  max-width: min(92vw, 1200px);
+  max-height: 90vh;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.65), 0 0 0 1px rgba(212,175,55,0.15) inset;
+}
+#image-modal img{
+  display: block;
+  width: auto;             
+  height: auto;            
+  max-width: 92vw;          
+  max-height: 86vh;        
+  object-fit: contain;     
+  background: #000;
+}
+#image-modal .hint{
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: rgba(255,255,255,0.8);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  user-select: none;
+}
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.toolbar .sort-btns button {
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  border: 1px solid var(--gold-2);
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .25s ease, transform .2s ease;
+  margin-left: 6px;
+}
+.toolbar .sort-btns button:hover {
+  background: rgba(212,175,55,0.18);
+  transform: translateY(-2px);
+}
+.toolbar .sort-btns button.active {
+  box-shadow: 0 0 0 1px rgba(212,175,55,0.5) inset;
+}
+.toolbar .sort-btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.toolbar input[type="text"] {
+  flex: 1;
+  min-width: 260px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--gold-2);
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  outline: none;
+}
+.footer{
+  position: fixed;
+  /* 和右侧内容区同一水平范围：避开左侧侧边栏 */
+  left: calc(var(--outer-pad) + var(--sidebar-w) + var(--gap));
+  right: var(--outer-pad);
+
+  /* 正好占据底部那条留白，并上下居中文本 */
+  bottom: 0;
+  height: var(--outer-pad);
+  display: flex;
+  align-items: center;      /* 上下居中 */
+  justify-content: center;  /* 水平居中 */
+
+  font-size: 12px;
+  color: rgba(223,215,198,0.65); /* 与 --parchment 协调的淡色 */
+  text-shadow: 0 1px 1px rgba(0,0,0,0.35);
+  user-select: none;
+  pointer-events: none; /* 不挡底部按钮点击 */
+}  
+.badge-line{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  justify-content:center;
+  margin:6px 0;
+}
+.badge{
+  font-size:12px;
+  padding:3px 10px;
+  border:1px solid var(--gold-2);
+  border-radius:999px;
+  background:rgba(0,0,0,0.28);
+  color:#d8ccb0;
+  white-space:nowrap;
+}
+.card-code-mid {
+  font-size: 14px;
+  color: var(--gold);
+  text-align: center;
+  font-family: "Uncial Antiqua", serif;
+  margin-top: 6px;
+}
+
+.card-divider {
+height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,0.55), transparent);
+  margin: 8px 0;
+  opacity: .85;
+}
+#image-modal .modal-inner{ will-change: transform; }
+#image-modal {
+  perspective: 800px; /* 透视深度，越小越夸张 */
+}
+
+#image-modal .modal-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.1s ease-out; /* 拖动时更顺滑 */
+  cursor: grab;
+}
+#image-modal .modal-inner.dragging {
+  cursor: grabbing;
+}
+/* === Sidebar settings button (Celtic gear) === */
+.sidebar { padding-bottom: 60px; } /* 给底部按钮留空间 */
+.sidebar-footer{
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 6px;
+  margin-top: 10px;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,0.18));
+  z-index: 3;
+}
+.settings-btn{
+  width: 52px; height: 52px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-2);
+  background:
+    radial-gradient(120% 120% at 30% 20%, rgba(255,255,255,0.12), rgba(0,0,0,0) 60%),
+    rgba(0,0,0,0.32);
+  box-shadow:
+    0 8px 20px rgba(0,0,0,0.45),
+    inset 0 0 18px rgba(212,175,55,0.10);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .2s ease, border-color .18s ease, filter .18s ease;
+  background-image: url('assets/gear_celtic.svg');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 28px 28px;
+}
+.settings-btn:hover{
+  transform: translateY(-2px);
+  border-color: rgba(212,175,55,0.7);
+  box-shadow:
+    0 10px 28px rgba(0,0,0,0.55),
+    inset 0 0 22px rgba(212,175,55,0.16);
+  filter: brightness(1.05);
+}
+.settings-btn:active{ transform: translateY(0); }
+.settings-btn:focus-visible{
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(212,175,55,0.55),
+    0 8px 20px rgba(0,0,0,0.45);
+}
+
+/* === Settings modal (Celtic style) === */
+#settings-modal{
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.78);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0; pointer-events: none; transition: opacity .2s ease;
+  padding: 4vh 4vw;
+}
+#settings-modal.open{ opacity: 1; pointer-events: auto; }
+
+.settings-inner{
+  width: min(960px, 92vw);
+  max-height: 86vh;
+  display: flex; flex-direction: column;
+  background: rgba(18, 18, 20, 0.72);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.65), 0 0 0 1px rgba(212,175,55,0.15) inset;
+  overflow: hidden;
+  transform: translateY(10px) scale(0.98);
+  transition: transform .22s ease, opacity .22s ease, filter .22s ease;
+  filter: drop-shadow(0 12px 30px rgba(0,0,0,0.55));
+  position: relative;
+}
+
+.settings-header{
+  display:flex; align-items:center; justify-content:center;
+  padding: 12px 48px 6px;
+  background:
+    radial-gradient(70% 180% at 50% -20%, rgba(255,236,179,0.10), transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,0.02), transparent 40%);
+  border-bottom: 1px solid rgba(212,175,55,0.18);
+}
+.settings-title .knot{
+  width: 220px; height: 24px; object-fit: contain; opacity: .85; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+}
+.settings-close{
+  position:absolute; right: 10px; top: 6px;
+  width: 40px; height: 40px; border-radius: 10px;
+  font-size: 26px; line-height: 40px;
+  border: 1px solid var(--gold-2); color: #fff; background: rgba(0,0,0,0.28);
+  cursor: pointer;
+  transition: transform .18s ease, background .18s ease, border-color .18s ease;
+}
+.settings-close:hover{ transform: rotate(4deg); background: rgba(212,175,55,0.12); border-color: rgba(212,175,55,0.6); }
+
+.settings-content{
+  padding: 14px 18px 18px;
+  overflow: auto;
+  background:
+    radial-gradient(180px 110px at 50% 8%, rgba(255,255,255,0.06), transparent 60%),
+    linear-gradient(180deg, rgba(0,0,0,0.05), transparent 60%);
+}
+.settings-placeholder{
+  height: 220px;
+  display:flex; align-items:center; justify-content:center;
+  color: #d8ccb0; opacity: .85; font-size: 14px;
+  border: 1px dashed rgba(212,175,55,0.25);
+  border-radius: 12px;
+  background:
+    radial-gradient(120% 120% at 30% 20%, rgba(255,255,255,0.04), rgba(0,0,0,0) 60%),
+    rgba(0,0,0,0.12);
+}
+#settings-modal.open .settings-inner{
+  transform: translateY(0) scale(1);
+}
+/* === 修复：去掉侧边栏底部色差背景 + 调整按钮位置 === */
+.sidebar { padding-bottom: 80px; }           /* 给底部按钮多留一点空间 */
+.sidebar-footer{
+  position: sticky;
+  bottom: 14px;                              /* 离底部“稍微高点” */
+  padding: 0;                                /* 去掉额外内边距 */
+  margin-top: 0;
+  background: transparent !important;        /* 关键：去掉那条渐变背景 */
+  box-shadow: none;
+}
+.settings-btn{
+  display: inline-block;
+  margin: 0 auto;
+}
+
+/* 设置面板标题样式 */
+.settings-title {
+  font-family: "Uncial Antiqua", serif; /* 跟你的标题一致的字体 */
+  font-size: 20px;
+  color: var(--gold);
+  text-align: center;
+  letter-spacing: 2px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  padding: 4px 0 6px;
+}
+
+
+/* === OVERRIDE: pin settings button, remove band, keep gap === */
+.sidebar{ position: relative !important; padding-bottom: 96px !important; }
+.sidebar-footer{
+  position: absolute !important;
+  left: 16px; right: 16px; bottom: 14px !important;
+  display: flex; justify-content: center;
+  padding: 0 !important; margin: 0 !important;
+  background: transparent !important; box-shadow: none !important;
+  z-index: 5;
+}
+.settings-btn{ display: inline-block; margin: 0 auto; }
+
+
+/* === OVERRIDE: settings modal title text === */
+.settings-header .settings-title{
+  font-family: "Uncial Antiqua", serif;
+  font-size: 20px; color: var(--gold);
+  text-align: center; letter-spacing: 2px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  padding: 4px 0 6px;
+}
+
+.settings-close:hover,
+.settings-close:active,
+.settings-close:focus {
+  transform: none !important; /* 禁用旋转 */
+}
+
+
+/* === Right-side detail panel (independent; big image stays centered) === */
+.detail-panel{
+  position: fixed;
+  top: 6vh;
+  right: 4vw;
+  width: min(420px, 32vw);
+  max-height: 88vh;
+  overflow: auto;
+  background: rgba(18,18,20,0.72);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.65), 0 0 0 1px rgba(212,175,55,0.15) inset;
+  padding: 14px 16px 16px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .28s ease, transform .28s ease;
+  pointer-events: none;
+}
+#image-modal.open .detail-panel.show{
+  opacity: 1;
+  transform: translateY(0);
+}
+.dp-title{ font-family: "Uncial Antiqua", serif; color: var(--gold); font-size: 18px; letter-spacing: 1px; margin: 2px 0 6px; }
+.dp-sub{ font-size: 12px; color:#d8ccb0; opacity:.9; margin-bottom: 8px; }
+.dp-line{ height:1px; background: linear-gradient(90deg, transparent, rgba(212,175,55,0.6), transparent); margin: 8px 0 10px; }
+.dp-badges{ display:flex; flex-wrap:wrap; gap:6px; margin: 6px 0 10px; }
+.dp-badge{ font-size:12px; padding:4px 10px; border:1px solid var(--gold-2); border-radius:999px; background:rgba(0,0,0,0.25); color:#d8ccb0; white-space:nowrap; }
+.dp-label{ font-size: 12px; color: var(--gold); margin: 6px 0 2px; }
+.dp-eff{ font-size: 13px; color:#e6dcc7; line-height:1.6; white-space: pre-wrap; }
+.dp-close-hint{ font-size: 11px; color: rgba(255,255,255,0.68); margin-top: 8px; }
+
+/* Ensure FX canvas doesn't block clicks on UI */
+#fx-layer{ position: fixed; inset: 0; z-index: 9999; pointer-events: none; }
+#bg-layer{ z-index: 0; }
+.sidebar-wrap, .right{ z-index: 2; }
+.content-header .toolbar{ position: relative; z-index: 2; }
+/* === Settings: 音频控件（凯尔特金色风） === */
+.settings-group{
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 10px 0 14px;
+  background:
+    radial-gradient(120% 120% at 30% 20%, rgba(255,255,255,0.04), rgba(0,0,0,0) 60%),
+    rgba(0,0,0,0.12);
+}
+.settings-group-title{
+  font-family: "Uncial Antiqua", serif;
+  color: var(--gold);
+  letter-spacing: 1px;
+  margin: 0 0 8px;
+  font-size: 16px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+.setting-row{
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 6px 0;
+}
+.setting-label{
+  min-width: 64px; font-size: 13px; color: #d8ccb0; opacity: .95;
+}
+.toggle{
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  user-select: none;
+}
+.toggle input{
+  appearance: none; width: 44px; height: 24px; border-radius: 999px;
+  border: 1px solid var(--gold-2);
+  background: rgba(0,0,0,0.35);
+  position: relative; outline: none; transition: background .2s ease, border-color .2s ease;
+}
+.toggle input::before{
+  content:""; position:absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+  border-radius: 50%; background: rgba(255,255,255,0.9);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  transition: transform .2s ease;
+}
+.toggle input:checked{
+  background: rgba(212,175,55,0.22);
+  border-color: rgba(212,175,55,0.65);
+}
+.toggle input:checked::before{ transform: translateX(20px); }
+
+input[type="range"].vol{
+  -webkit-appearance: none; appearance: none;
+  width: 220px; height: 6px; border-radius: 999px; outline: none;
+  background: linear-gradient(90deg, rgba(212,175,55,0.65), rgba(212,175,55,0.10));
+  border: 1px solid rgba(212,175,55,0.35);
+  box-shadow: inset 0 0 8px rgba(0,0,0,0.35);
+}
+input[type="range"].vol::-webkit-slider-thumb{
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; border: 1px solid rgba(212,175,55,0.7);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+}
+.input-note{
+  font-size: 12px; color: rgba(223,215,198,0.75);
+}
+/* === 显示项逐项开关（不改 DOM，靠类控制） === */
+body.no-name  .card .card-info h3{ display:none !important; }
+body.no-code  .card .card-code-mid,
+body.no-code  .card .card-divider{ display:none !important; }
+body.no-meta  .card .badge-line{ display:none !important; }
+body.no-eff   .card .card-info p{ display:none !important; }
+body.no-name.no-code.no-meta.no-eff .card .card-info{
+  display: none !important;
+}
+
+/* 关特效时，隐藏卡片 FX 画布（JS 同时会把 FXModules 置空实现真正关闭） */
+body.fx-off .card .card-fx{ display:none !important; }
+
+/* 关落叶时，隐藏落叶画布（JS 会配合 pause） */
+body.leaves-off #leaf-fx-canvas-v3{ display:none !important; }
+/* ===== Mobile Portrait（竖屏）修正：≤ 820px 改为上下布局、可滚动、控件自适应 ===== */
+@media (max-width: 820px) and (orientation: portrait){
+
+  :root{
+    --sidebar-w: auto;   /* 不再固定宽 */
+    --gap: 12px;
+    --outer-pad: 12px;
+  }
+
+  body{ overflow: auto; } /* 允许整页滚动 */
+
+  /* 左右两列改为文档流堆叠（先侧栏后内容） */
+  .sidebar-wrap,
+  .right{
+    position: static !important;
+    left: auto; right: auto; top: auto; bottom: auto;
+    width: auto !important;
+  }
+  .sidebar-wrap{ margin: var(--outer-pad); }
+  .right{ margin: 0 var(--outer-pad) var(--outer-pad); }
+
+  /* 内容区内部滚动改为随页面滚动 */
+  .cards-scroll{
+    max-height: none;
+    overflow: visible;
+    padding: 10px 12px 14px;
+  }
+
+  /* 顶部图（抬头）矮一点，避免占满屏 */
+  .content-header{ min-height: 44px; }
+  .content-header img{ height: 44px; }
+
+  /* 工具栏改为纵排、输入框撑满 */
+  .toolbar{
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .toolbar input[type="text"]{ min-width: 0; width: 100%; }
+  .toolbar .sort-btns{ justify-content: flex-start; gap: 8px; }
+
+  /* 卡片栅格：窄屏每行 1~2 张，卡片更紧凑 */
+  .card-grid{
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+  }
+  .card-img{ max-height: 300px; }
+
+  /* 底部固定条在手机上容易被浏览器工具栏挡，改为非固定 */
+  .footer{
+    position: static;
+    height: auto;
+    margin: 10px 0 0;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px));
+  }
+
+  /* 侧边栏齿轮按钮：保持可点、不遮挡 */
+  .sidebar{ padding-bottom: 72px !important; }
+  .sidebar-footer{
+    position: static !important;
+    padding-top: 8px !important;
+    background: transparent !important;
+  }
+
+  /* 弹窗：小屏边距更紧凑，方便手势拖拽 */
+  #image-modal{ padding: 4vh 3vw; }
+  #image-modal .modal-inner{ max-width: 96vw; max-height: 86vh; }
+
+  /* 触控手势不被 hover 画布误触 */
+  .card-fx{ touch-action: none; }
+
+  /* FX 层兜底 */
+  #fx-layer{ pointer-events: none !important; }
+}
+
+/* ===== Mobile Landscape（横屏）策略：≤ 820px 也使用双列固定布局 ===== */
+@media (max-width: 820px) and (orientation: landscape){
+  :root{ --sidebar-w: 300px; --gap: 14px; --outer-pad: 10px; }
+
+  /* 回到固定双列（更接近 PC） */
+  body{ overflow: hidden; }
+
+  .sidebar-wrap{
+    position: fixed; top: var(--outer-pad); bottom: var(--outer-pad);
+    left: var(--outer-pad); width: var(--sidebar-w);
+  }
+  .right{
+    position: fixed; top: var(--outer-pad); bottom: var(--outer-pad);
+    left: calc(var(--outer-pad) + var(--sidebar-w) + var(--gap));
+    right: var(--outer-pad);
+    display: flex; flex-direction: column;
+  }
+  .cards-scroll{ flex: 1; overflow: auto; }
+
+  .content-header img{ height: 44px; }
+}
+
+/* ===== Mobile: hide bottom hint inside image modal ===== */
+@media (max-width: 820px){
+  #image-modal .hint{ display: none !important; }
+}
+
+/* ===== Strong mobile rules (phones & touch devices) ===== */
+
+/* 1) Generic small screens */
+@media (max-width: 1024px){
+  #image-modal .hint{ display: none !important; }
+  .content-header img{ display: none !important; }
+  .footer{ display: none !important; }
+}
+
+/* 2) Touch devices (regardless of width) */
+@media (hover: none){
+  #image-modal .hint{ display: none !important; }
+}
+@media (pointer: coarse){
+  #image-modal .hint{ display: none !important; }
+  .content-header img{ display: none !important; }
+  .footer{ display: none !important; }
+}
+
+/* 3) iOS Safari notch safety (ensure nothing peeks) */
+@supports(padding: max(0px)){
+  @media (max-width: 1024px){
+    #image-modal .hint{ display: none !important; }
+  }
+}
+
+/* === v8: Mobile settings button position fix === */
+@media (max-width: 820px){
+  .sidebar-footer{
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    padding: 6px 0 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .settings-btn{ margin: 0 !important; }
+}
+/* ===== Mobile 横屏专用覆盖：布局对齐 PC，卡片 4 列，按钮变小 ===== */
+@media (max-width: 820px) and (orientation: landscape){
+  :root{
+    --sidebar-w: 160px;   /* 左侧更窄 */
+    --gap: 10px;
+    --outer-pad: 10px;
+  }
+
+  /* 固定双列布局（已有），这里确保宽度与间距 */
+  .sidebar-wrap{ width: var(--sidebar-w) !important; }
+  .right{
+    left: calc(var(--outer-pad) + var(--sidebar-w) + var(--gap)) !important;
+  }
+
+  /* 工具栏压缩到一行 */
+  .toolbar{
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    align-items: center !important;
+  }
+  .toolbar input[type="text"]{
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    height: 34px !important;
+    font-size: 12px !important;
+    padding: 8px 10px !important;
+  }
+  .toolbar .sort-btns{
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+  }
+  .toolbar .sort-btns button{
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+  }
+
+  /* 卡片网格：一行至少5 张 */
+  .cards-scroll{ padding: 8px 12px 10px !important; }
+  .card-grid{
+    grid-template-columns: repeat(5, minmax(0,1fr)) !important;
+    gap: 10px !important;
+  }
+  .card{
+    border-width: 2px !important;
+    border-radius: 10px !important;
+  }
+  .card-img{ max-height: 160px !important; }
+  .card-info h3{ font-size: 14px !important; }
+  .card-info p{ font-size: 12px !important; }
+  .badge{ font-size: 10px !important; padding: 2px 6px !important; }
+
+  /* 分页压缩 */
+  .pagination{ gap: 6px !important; padding: 4px 0 !important; }
+  .pagination button,
+  .page-numbers .num{
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+  }
+  .page-info{ font-size: 11px !important; }
+
+  /* 设置齿轮按钮固定在侧栏最底部（修正你说的“跑到中间”） */
+  .sidebar{ padding-bottom: 64px !important; }
+  .sidebar-footer{
+    position: absolute !important;
+    left: 16px !important; right: 16px !important;
+    bottom: 10px !important;
+    display: flex !important;
+    justify-content: center !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .settings-btn{ margin: 0 auto !important; }
+}
+
+
+
+/* ===== Mobile 全局：侧栏只允许纵向滚动，禁横向 ===== */
+@media (max-width: 820px){
+  .sidebar{
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+  /* 防止内部控件撑破侧栏导致横向滚动条 */
+  .sidebar *{ max-width: 100%; }
+}
+
+/* ===== Mobile（竖/横屏都适用）：齿轮固定在侧栏底部居中 ===== */
+@media (max-width: 820px){
+  .sidebar{
+    position: relative !important;
+    padding-bottom: 80px !important;   /* 给底部按钮留空间 */
+  }
+  .sidebar-footer{
+    position: absolute !important;
+    left: 16px !important; right: 16px !important;
+    bottom: 10px !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin: 0 !important; padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .settings-btn{ margin: 0 auto !important; }
+}
+
+
+
+/* === Mobile 终极修正：侧栏禁横向滚动 + 齿轮固定底部 === */
+@media (max-width: 820px){
+  /* 侧栏与包裹层都不允许横向滚动条 */
+  .sidebar-wrap{ overflow-x: hidden !important; }
+  aside.sidebar{
+    position: relative !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    padding-bottom: 96px !important; /* 给底部按钮留出滚动空间 */
+  }
+
+  /* 用更高优先级选择器，覆盖此前所有 static/sticky 规则 */
+  aside.sidebar > .sidebar-footer{
+    position: absolute !important;
+    left: 16px !important;
+    right: 16px !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* 按钮本体保持居中 */
+  aside.sidebar > .sidebar-footer .settings-btn{
+    margin: 0 auto !important;
+  }
+}
+
+
+
+
+/* === 手机竖屏：侧栏回归正常流式，按钮不绝对定位 === */
+@media (max-width: 820px) and (orientation: portrait){
+  aside.sidebar{
+    position: static !important;
+    overflow: visible !important;
+    padding-bottom: 0 !important;
+  }
+  /* 如果之前创建过滚动容器，也让它回归普通块级 */
+  aside.sidebar > .sidebar-scroll{
+    position: static !important;
+    top: auto !important; bottom: auto !important; left: auto !important; right: auto !important;
+    overflow: visible !important;
+    padding: 16px !important;
+  }
+  aside.sidebar > .sidebar-footer{
+    position: static !important;
+    display: flex !important;
+    justify-content: center !important;
+    margin: 8px 0 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}
+
+/* === 手机横屏：侧栏内容单独滚，按钮固定在侧栏底部 === */
+@media (max-width: 820px) and (orientation: landscape){
+  aside.sidebar{
+    position: relative !important;
+    overflow: hidden !important;       /* 关键：别让 sidebar 自己滚 */
+    padding-bottom: 96px !important;   /* 给底部按钮留空间 */
+  }
+  aside.sidebar > .sidebar-scroll{
+    position: absolute !important;
+    top: 0; left: 0; right: 0;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 76px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px !important;
+  }
+  aside.sidebar > .sidebar-footer{
+    position: absolute !important;
+    left: 0 !important; right: 0 !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
+    display: flex !important;
+    justify-content: center !important;
+    margin: 0 !important; padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    z-index: 10 !important;
+  }
+  /* 齿轮图标兜底（防止被 background 简写盖掉） */
+  #open-settings.settings-btn{
+    background-image: url('assets/gear_celtic.svg') !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: 28px 28px !important;
+  }
+}
+
+
+
+
+
+</style>
+<script src="fx-modules.js"></script>
+<script src="cards-data.js?v=20250811"></script>
+
+</head>
+<body oncontextmenu="return false;">
+<div id="bg-layer"></div>
+<div class="sidebar-wrap">
+<aside class="sidebar">
+<div class="brand">
+<img alt="Logo" class="logo" src="assets/logo.png"/>
+</div>
+<h2 class="title">神树遗契</h2>
+<div class="filter-category">
+<label for="main-type">主类型</label>
+<select id="main-type">
+<option value="">不限</option>
+<option>攻击</option><option>效果</option><option>治疗</option>
+<option>装备</option><option>陷阱</option><option>结界</option>
+</select>
+</div>
+<div class="filter-category">
+<label for="sub-type">特殊类型</label>
+<select id="sub-type">
+<option value="">不限</option>
+<option>状态</option><option>瞬间</option><option>武器</option><option>守护</option><option>神器</option>
+</select>
+</div>
+<div class="filter-category">
+<label for="attr">属性</label>
+<select id="attr">
+<option value="">不限</option>
+<option>地</option><option>水</option><option>风</option><option>火</option>
+<option>光</option><option>暗</option><option>全部</option>
+</select>
+</div>
+<div class="filter-category">
+<label for="level">等级</label>
+<select id="level">
+<option value="">不限</option>
+<option>1</option><option>2</option><option>3</option><option>4</option>
+</select>
+</div>
+<div class="filter-category">
+<label for="mark">印记</label>
+<select id="mark">
+<option value="">不限</option>
+<option>无印记</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4+</option>
+</select>
+</div>
+<div class="sidebar-footer">
+<button aria-label="设置" class="settings-btn" id="open-settings"></button>
+</div>
+</aside>
+</div>
+<div class="right">
+<div class="content-panel">
+<div class="content-header">
+<img alt="branch header" src="assets/header_branch.png"/>
+<div class="toolbar">
+<input id="search" placeholder="搜索：编号 / 名称 / 效果…" type="text"/>
+<div class="sort-btns">
+<button class="active" id="sort-asc" type="button">正序</button>
+<button id="sort-desc" type="button">倒序</button>
+<button id="sort-rand" type="button">随机</button>
+</div>
+</div>
+</div>
+<div class="glow-line"></div>
+<div class="cards-scroll" id="cards-scroll">
+<div class="card-grid" id="card-grid"></div>
+</div>
+<div class="glow-line"></div>
+<div class="pagination">
+<button id="prev">上一页</button>
+<div class="page-numbers" id="page-numbers"></div>
+<button id="next">下一页</button>
+<span class="page-info" id="page-info"></span>
+</div>
+</div>
+</div>
+<div id="fx-layer"></div>
+<!-- 大图弹窗 -->
+<div aria-hidden="true" aria-label="卡牌大图预览（点击任意位置关闭）" id="image-modal" role="dialog">
+<div class="modal-inner">
+<img alt="" id="modal-img" src=""/>
+</div><div aria-label="卡牌详情" aria-live="polite" class="detail-panel" id="detail-panel"><div class="dp-title" id="dp-name">—</div><div class="dp-sub"><span id="dp-code">—</span></div><div class="dp-line"></div><div class="dp-badges" id="dp-badges"></div><div class="dp-label">效果</div><div class="dp-eff" id="dp-eff">—</div></div>
+<div class="hint">点击任意位置或按 Esc关闭，长按可拖动卡牌</div>
+</div>
+<!-- 设置面板（凯尔特风） -->
+<div aria-hidden="true" aria-label="设置" id="settings-modal" role="dialog">
+<div class="settings-inner" role="document">
+<div class="settings-header">
+<div class="settings-title">设置</div>
+<button aria-label="关闭" class="settings-close" id="close-settings">×</button>
+</div>
+<div class="settings-content">
+<!-- 这里之后放设置项 -->
+<div class="settings-group" id="audio-settings">
+  <div class="settings-group-title">声音</div>
+
+  <div class="setting-row">
+    <div class="setting-label">开关</div>
+    <label class="toggle">
+      <input id="opt-sound" type="checkbox"/>
+      <span class="input-note">关闭/开启音乐</span>
+    </label>
+  </div>
+
+  <div class="setting-row">
+    <div class="setting-label">背景音量</div>
+    <input id="opt-volume" class="vol" type="range" min="0" max="1" step="0.01"/>
+    <span id="vol-text" class="input-note">—</span>
+  </div>
+<!-- === 新增：音效（SFX）总开关 + 音量 === -->
+  <div class="setting-row">
+    <div class="setting-label">音效</div>
+    <label class="toggle">
+      <input id="opt-sfx" type="checkbox"/>
+      <span class="input-note">关闭/开启音效</span>
+    </label>
+  </div>
+
+  <div class="setting-row">
+    <div class="setting-label">音效音量</div>
+    <input id="opt-sfx-vol" class="vol" type="range" min="0" max="1" step="0.01"/>
+    <span id="sfx-vol-text" class="input-note">—</span>
+  </div>
+
+  <div class="setting-row">
+    <div class="setting-label">简洁音效</div>
+    <label class="toggle">
+      <input id="opt-sfx-simple" type="checkbox"/>
+      <span class="input-note">将悬停音效统一</span>
+    </label>
+  </div>
+</div>
+<div class="settings-group">
+  <div class="settings-group-title">显示</div>
+
+  <div class="setting-row">
+    <div class="setting-label">特效</div>
+    <label class="toggle">
+      <input id="opt-fx" type="checkbox">
+      <span class="input-note">关闭/开启卡牌特效</span>
+    </label>
+  </div>
+
+  <div class="setting-row">
+    <div class="setting-label">背景</div>
+    <label class="toggle">
+      <input id="opt-leaves" type="checkbox">
+      <span class="input-note">关闭/开启背景落叶</span>
+    </label>
+  </div>
+
+  <div class="setting-row">
+    <div class="setting-label">信息</div>
+    <label class="toggle"><input id="show-name" type="checkbox"><span class="input-note">名称</span></label>
+    <label class="toggle"><input id="show-code" type="checkbox"><span class="input-note">编号</span></label>
+    <label class="toggle"><input id="show-meta" type="checkbox"><span class="input-note">数据</span></label>
+    <label class="toggle"><input id="show-eff"  type="checkbox"><span class="input-note">效果</span></label>
+  </div>
+</div>
+</div>
+</div>
+</div>
+<script>
+
+    // (hover FX moved to fx-modules.js)
+// ---- SFX Safe Stub (prevents ReferenceError if SFX not loaded) ----
+(function(){
+  if (!window.SFX) {
+    const throttles = new Map();
+    window.SFX = {
+      play: function(){ /* no-op when assets missing */ },
+      playThrottled: function(key, gap=180){
+        const now = Date.now();
+        const last = throttles.get(key) || 0;
+        if (now - last >= gap) {
+          throttles.set(key, now);
+          try { this.play(key); } catch(e){}
+        }
+      },
+      mapAttrToKey: function(attr){
+        try{
+          const a = (attr||'').toString().replace(/[【】]/g,'').trim();
+          const map = { '地':'earth','水':'water','风':'wind','火':'fire','光':'light','暗':'dark','全部':'rainbow' };
+          return map[a] || null;
+        }catch(e){ return null; }
+      }
+    };
+    try{ console.warn('[SFX] Fallback stub enabled (no real SFX loaded)'); }catch(e){}
+  }
+})();
+
+    let currentPage = 1;
+    const cardsPerPage = 10; // 每页最多 10 个
+    const grid = document.getElementById('card-grid');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+    const pageNumbersEl = document.getElementById('page-numbers');
+    const pageInfoEl = document.getElementById('page-info');
+    const cardsScroll = document.getElementById('cards-scroll');
+
+    const selects = {
+      mainType: document.getElementById('main-type'),
+      subType:  document.getElementById('sub-type'),
+      attr:     document.getElementById('attr'),
+      level:    document.getElementById('level'),
+      mark:     document.getElementById('mark'),
+    };
+    Object.values(selects).forEach(sel => sel.addEventListener('change', () => { currentPage = 1; displayCards(); }));
+
+    // === 大图弹窗逻辑 ===
+    const modal = document.getElementById('image-modal');
+    const modalImg = document.getElementById('modal-img');
+const modalInner = document.querySelector('#image-modal .modal-inner'); // 新增：给外框做动画
+const detailPanel = document.getElementById('detail-panel');
+modalImg.addEventListener('dragstart', e => e.preventDefault());
+
+    function openImageModal(src, name){
+      modalImg.src = src;
+      modalImg.alt = name || "";
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+  try{ window.SFX && SFX.play('card'); }catch(e){}
+
+
+  // detail panel: render and fade in with a short delay
+  try{ renderDetail(window.__lastCardMeta || null); }catch(e){}
+  if(detailPanel){ detailPanel.classList.remove('show'); setTimeout(()=>detailPanel.classList.add('show'), 160); }
+// ===== 轻摇动画：小幅、多次但递减幅度，带一点回弹 =====
+gsap.killTweensOf(modalInner);
+gsap.set(modalInner, { rotation: 0, scale: 1, transformOrigin: "50% 50%" });
+
+const tl = gsap.timeline();
+tl.to(modalInner, { rotation: 4,  duration: 0.10, ease: "power2.out" })
+  .to(modalInner, { rotation: -3, duration: 0.12, ease: "power2.inOut" })
+  .to(modalInner, { rotation: 2,  duration: 0.10, ease: "power2.inOut" })
+  .to(modalInner, { rotation: 0,  duration: 0.14, ease: "back.out(2)" }); // 轻微弹性回正
+
+// 缩放也同步加快
+tl.fromTo(modalInner, { scale: 0.995 }, { scale: 1.01, duration: 0.15, ease: "power1.out" }, 0)
+  .to(modalInner, { scale: 1, duration: 0.18, ease: "power2.out" }, "-=0.08");
+
+enable3DRotate(modalInner);
+
+
+function enable3DRotate(el){
+  // Use Pointer Events to support mouse + touch
+  let isDown = false;
+  let startX = 0, startY = 0;
+  let currentRotX = 0, currentRotY = 0;
+
+  try{ el.style.touchAction = 'none'; }catch(e){}
+
+  const clamp = (v, min, max)=> Math.max(min, Math.min(max, v));
+
+  const onDown = (e)=>{
+    try{
+      isDown = true;
+      el.classList.add('dragging');
+      startX = e.clientX;
+      startY = e.clientY;
+      if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
+    }catch(err){}
+  };
+  const onMove = (e)=>{
+    if(!isDown) return;
+    try{ e.preventDefault(); }catch(err){}
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
+    const rotY = clamp(currentRotY + deltaX * 0.20, -12, 12);
+    const rotX = clamp(currentRotX - deltaY * 0.20, -12, 12);
+    el.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+  };
+  const onUp = (e)=>{
+    if(!isDown) return;
+    isDown = false;
+    el.classList.remove('dragging');
+    const match = el.style.transform.match(/rotateX\(([-\d.]+)deg\)\s*rotateY\(([-\d.]+)deg\)/);
+    if(match){
+      currentRotX = parseFloat(match[1]) || 0;
+      currentRotY = parseFloat(match[2]) || 0;
+    }
+    try{ if (e && el.releasePointerCapture) el.releasePointerCapture(e.pointerId); }catch(err){}
+  };
+
+  el.addEventListener('pointerdown', onDown);
+  el.addEventListener('pointermove', onMove, { passive: false });
+  el.addEventListener('pointerup', onUp);
+  el.addEventListener('pointercancel', onUp);
+}
+
+    }
+    function closeImageModal(){
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      
+  if(detailPanel){ detailPanel.classList.remove('show'); }
+setTimeout(()=>{ modalImg.src = ""; }, 200);
+ try{ window.SFX && SFX.play('card'); }catch(e){}
+    }
+let dragMoved = false;
+let startX, startY;
+
+modal.addEventListener('mousedown', e => {
+  dragMoved = false;
+  startX = e.clientX;
+  startY = e.clientY;
+});
+
+modal.addEventListener('mousemove', e => {
+  if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
+    dragMoved = true; // 移动超过 5px 认为是拖动
+  }
+});
+
+modal.addEventListener('mouseup', e => {
+  if (!dragMoved) {
+    closeImageModal(); // 只有没拖动才关闭
+  } else {
+    // 拖动过 → 松开时回到正面
+    gsap.to(modalInner, {
+      rotationX: 0,
+      rotationY: 0,
+      duration: 0.3,
+      ease: "power2.out"
+    });
+  }
+});
+    window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeImageModal(); });
+
+    // === 工具函数 ===
+    function norm(s){ return (s ?? '').toString().replace(/[【】]/g,'').trim(); }
+    function markFilterValue(v){
+      const t = (v ?? '').toString().trim();
+      if (!t || t === '-' ) return '无印记';
+      if (t === '∞') return '4+';
+      const n = Number(t);
+      if (!isNaN(n)) return n >= 4 ? '4+' : String(n);
+      return t.includes('4+') ? '4+' : t;
+    }
+    // 由“编号”推图片：images/A-001.png；找不到就默认.png
+    function getImageSrc(card){
+      const id = norm(card['编号']);        // 形如 A-001
+      return id ? `images/${id}.png` : 'images/默认.png';
+    }
+    // 编号排序用的 key：支持 A-001 / B-010 等，按字母+数字自然排序
+    function idKey(card){
+      const id = norm(card['编号']); // e.g. A-001
+      const m = id.match(/^([A-Za-z]+)-?(\d+)$/);
+      if(!m) return id;
+      // 统一：字母段 + 数值段（固定宽度）
+      return m[1].toUpperCase() + '-' + String(parseInt(m[2],10)).padStart(6,'0');
+    }
+
+
+// 显示用：主类型|特殊类型（特殊类型为空/“-”/“无”时不拼接）
+function displayTypeText(c){
+  const main = norm(c['主类型']);
+  const sub  = norm(c['特殊类型']);
+  const hasSub = sub && sub !== '-' && sub !== '无';
+  return hasSub ? `${main}|${sub}` : main;
+}
+
+// 显示用：印记（把 ∞ 归为 4+，其余原样或数值）
+function displayMark(c){
+  const t = (c['印记'] ?? '').toString().trim();
+  if (!t) return '-';
+  if (t === '∞') return '4+';
+  if (t === '-') return '-';
+  const n = Number(t);
+  if (!isNaN(n)) return n >= 4 ? '4+' : String(n);
+  return t;
+}
+
+// 显示用：干净的编号/属性/等级（去掉【】）
+function displayNorm(v){
+  return (v ?? '').toString().replace(/[【】]/g,'').trim();
+}
+
+
+
+
+
+
+
+    // === 过滤（筛选 + 搜索） ===
+    const searchInput = document.getElementById('search');
+    let searchText = '';
+    searchInput.addEventListener('input', () => {
+      searchText = searchInput.value.trim();
+      currentPage = 1;
+      displayCards();
+    });
+
+    function matchSearch(c){
+      if(!searchText) return true;
+      const q = searchText.toLowerCase();
+      const id = norm(c['编号']).toLowerCase();
+      const name = (c['名称']||'').toString().toLowerCase();
+      const eff = (c['效果']||'').toString().toLowerCase();
+      return id.includes(q) || name.includes(q) || eff.includes(q);
+    }
+
+    function passFilter(c){
+      if (selects.mainType.value && norm(c['主类型']) !== selects.mainType.value) return false;
+      if (selects.subType.value  && norm(c['特殊类型']) !== selects.subType.value) return false;
+      if (selects.attr.value     && norm(c['属性'])     !== selects.attr.value)    return false; // “全部”为独立属性
+      if (selects.level.value    && norm(c['等级'])     !== selects.level.value)   return false;
+      if (selects.mark.value     && markFilterValue(c['印记']) !== selects.mark.value) return false;
+      return matchSearch(c);
+    }
+
+    // === 排序：正序 / 倒序 / 随机（全局排序后再分页） ===
+    const btnAsc  = document.getElementById('sort-asc');
+    const btnDesc = document.getElementById('sort-desc');
+    const btnRand = document.getElementById('sort-rand');
+    let sortMode = 'asc';
+    let lastRandomOrder = []; // 保存随机顺序（在点击“随机”时重置）
+
+    function setActiveSort(btn){
+      [btnAsc, btnDesc, btnRand].forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+    btnAsc.addEventListener('click', ()=>{ sortMode='asc'; setActiveSort(btnAsc); currentPage=1; displayCards();try{ window.SFX && SFX.play('click'); }catch(e){} });
+
+    btnDesc.addEventListener('click', ()=>{ sortMode='desc'; setActiveSort(btnDesc); currentPage=1; displayCards();try{ window.SFX && SFX.play('click'); }catch(e){} });
+
+    btnRand.addEventListener('click', ()=>{
+      sortMode='rand'; setActiveSort(btnRand); currentPage=1;
+      // 生成新的随机键（针对当前过滤后的集合，见 displayCards 内）
+      displayCards(true);
+try{ window.SFX && SFX.play('click'); }catch(e){}
+    });
+
+    function sortCards(arr, regenerateRandom=false){
+      if(sortMode==='asc'){
+        return arr.slice().sort((a,b)=> idKey(a).localeCompare(idKey(b)));
+      }else if(sortMode==='desc'){
+        return arr.slice().sort((a,b)=> idKey(b).localeCompare(idKey(a)));
+      }else{
+        // 随机：对当前集合生成固定随机顺序，直到再次点击“随机”或切换其他排序
+        if(regenerateRandom || lastRandomOrder.length !== arr.length){
+          lastRandomOrder = arr.map((_,i)=>({i, r: Math.random()})).sort((a,b)=>a.r-b.r).map(o=>o.i);
+        }
+        return lastRandomOrder.map(i=>arr[i]);
+      }
+    }
+
+    // === 渲染（全局排序 -> 分页切片 -> DOM） ===
+    function renderPagination(total, totalPages){
+      // 按钮状态
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages || totalPages===0;
+
+      // 页码按钮
+      pageNumbersEl.innerHTML = '';
+      if(totalPages <= 1) {
+        pageInfoEl.textContent = totalPages===0 ? '第 0 页 / 共 0 页' : '第 1 页 / 共 1 页';
+        return;
+      }
+
+      // 显示最多 9 个页码，带省略
+      const maxShow = 9;
+      let start = Math.max(1, currentPage - 4);
+      let end = Math.min(totalPages, start + maxShow - 1);
+      start = Math.max(1, Math.min(start, end - maxShow + 1));
+
+      function addNum(n){
+        const b = document.createElement('button');
+        b.className = 'num' + (n===currentPage ? ' active' : '');
+        b.textContent = n;
+        b.addEventListener('click', ()=>{ currentPage = n; displayCards(); cardsScroll.scrollTop = 0; });
+        pageNumbersEl.appendChild(b);
+      }
+      function addEllipsis(){
+        const s = document.createElement('span');
+        s.className = 'page-info';
+        s.textContent = '…';
+        pageNumbersEl.appendChild(s);
+      }
+
+      if(start > 1){ addNum(1); if(start>2) addEllipsis(); }
+      for(let n=start; n<=end; n++) addNum(n);
+      if(end < totalPages){ if(end<totalPages-1) addEllipsis(); addNum(totalPages); }
+
+      pageInfoEl.textContent = `第 ${currentPage} 页 / 共 ${totalPages} 页`;
+    }
+
+    function displayCards(regenerateRandom=false){
+      // 1) 过滤
+      const filtered = cards.filter(passFilter);
+
+      // 2) 排序（针对所有的，从一开始排序）
+      const ordered = sortCards(filtered, regenerateRandom);
+
+      // 3) 分页
+      const total = ordered.length;
+      const totalPages = Math.max(1, Math.ceil(total / cardsPerPage));
+      if(currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * cardsPerPage;
+      const pageCards = ordered.slice(start, start + cardsPerPage);
+
+      // 4) DOM
+      grid.innerHTML = "";
+      pageCards.forEach(card => {
+        const el = document.createElement('div');
+        el.className = "card";
+el.innerHTML = `
+  <canvas class="card-fx"></canvas>
+  <img class="card-img" src="${getImageSrc(card)}" alt="${card['名称']}">
+  <div class="card-info">
+
+    <h3>${card['名称']}</h3>
+
+    <div class="badge-line">
+      <span class="badge">${displayTypeText(card) || '-'}</span>
+      <span class="badge">属性：${displayNorm(card['属性']) || '-'}</span>
+      <span class="badge">等级：${displayNorm(card['等级']) || '-'}</span>
+    </div>
+
+    <div class="card-code-mid">${displayNorm(card['编号']) || '-'}</div>
+    <div class="card-divider"></div>
+
+    <p>${card['效果'] || ''}</p>
+  </div>
+`;
+        const imgEl = el.querySelector('.card-img');
+        imgEl.addEventListener('error', function(){ this.onerror=null; this.src='images/默认.png'; });
+
+        // 悬停上浮
+        el.addEventListener('mouseenter', () => {
+          gsap.killTweensOf(el, "y");
+          gsap.to(el, { y: -12, duration: 0.18, ease: "power2.out" });
+          if (window.__SFX_SIMPLE) {
+            try{
+              if (SFX.playThrottled) SFX.playThrottled('card', 180);
+              else if (SFX.play) try{ window.SFX && SFX.play('card'); }catch(e){}
+            }catch(e){}
+          } else {
+            const key = SFX.mapAttrToKey(card['属性']);
+            if(key) SFX.playThrottled(key, 180);
+          }
+        });
+
+        el.addEventListener('mouseleave', () => {
+          gsap.killTweensOf(el, "y");
+          gsap.to(el, { y: 0, duration: 0.22, ease: "power2.inOut" });
+        });
+
+        // 点击：掠光 + 打开大图
+        el.addEventListener('click', () => {
+try { window.FXModules && window.FXModules.explosion(el, { mode: 'click', attr: (card['属性']||'').toString().replace(/[【】]/g,'').trim() }); } catch(e) {}
+            // stash meta for detail panel
+  window.__lastCardMeta = card;
+  openImageModal(imgEl.src, card['名称']);
+});
+
+        grid.appendChild(el);
+        try{
+          const fx = el.querySelector('.card-fx');
+          FXModules && FXModules.applyToCard(el, { attr: (card['属性']||'').toString().replace(/[【】]/g,'').trim(), canvas: fx });
+        }catch(e){ console.warn('FX init failed:', e); }
+      });
+
+      // 5) 分页 UI
+      renderPagination(total, totalPages);
+
+      // 进场动画
+      gsap.fromTo('.card', {autoAlpha:0, y:24}, {autoAlpha:1, y:0, duration:0.7, stagger:0.06, ease:"power2.out"});
+    }
+
+    // 上/下一页
+    prevBtn.addEventListener('click', () => {
+      if(currentPage>1){ currentPage--; displayCards(); cardsScroll.scrollTop = 0; }
+try{ window.SFX && SFX.play('click'); }catch(e){}
+    });
+    nextBtn.addEventListener('click', () => {
+      // 基于当前过滤后的数据长度判断是否还能下一页
+      const filteredLen = cards.filter(passFilter).length;
+      const totalPages = Math.max(1, Math.ceil(filteredLen / cardsPerPage));
+      if(currentPage < totalPages){ currentPage++; displayCards(); cardsScroll.scrollTop = 0; }
+try{ window.SFX && SFX.play('click'); }catch(e){} 
+    });
+
+    // 初次渲染
+    displayCards();
+
+    // ------------------ PIXI Background: stars + flow ------------------
+if (window.PIXI) {
+    const bgLayer = document.getElementById('bg-layer');
+    const appBG = new PIXI.Application({ resizeTo: window, backgroundAlpha: 0, antialias: true });
+    bgLayer.appendChild(appBG.view);
+
+    const rootContainer = new PIXI.Container();
+    appBG.stage.addChild(rootContainer);
+
+    // Stars
+    const stars = new PIXI.Container();
+    rootContainer.addChild(stars);
+    function createStars(count=160){
+      for(let i=0;i<count;i++){
+        const g = new PIXI.Graphics();
+        const r = Math.random()*1.3 + 0.4;
+        g.beginFill(0xffffff, 0.8);
+        g.drawCircle(0,0,r);
+        g.endFill();
+        g.x = Math.random()*window.innerWidth;
+        g.y = Math.random()*window.innerHeight;
+        g.alpha = Math.random()*0.6 + 0.2;
+        g._tw = Math.random()*Math.PI*2;
+        g._spd = 0.004 + Math.random()*0.006;
+        stars.addChild(g);
+      }
+    }
+    createStars(160);
+
+    // Golden flow lines
+    const flow = new PIXI.Container();
+    rootContainer.addChild(flow);
+    function makeLine() {
+      const g = new PIXI.Graphics();
+      g.blendMode = PIXI.BLEND_MODES.ADD;
+      g.alpha = 0.95;
+      let t = Math.random()*Math.PI*2;
+      const amp = 110 + Math.random()*150;
+      const yBase = Math.random()*window.innerHeight;
+      const xOff = Math.random()*window.innerWidth;
+      const thickness = 1.5 + Math.random()*1.8;
+      function draw(){
+        g.clear();
+        g.lineStyle(thickness, 0xd4af37, 0.95);
+        const pts = [];
+        const segs = 28;
+        for(let i=0;i<=segs;i++){
+          const x = xOff + (i/segs)*window.innerWidth;
+          const y = yBase + Math.sin(t + i*0.55) * amp + Math.cos((t*0.65)+i*0.30)*amp*0.30;
+          pts.push({x,y});
+        }
+        g.moveTo(pts[0].x, pts[0].y);
+        for(let i=1;i<pts.length;i++){ g.lineTo(pts[i].x, pts[i].y); }
+        t += 0.012;
+      }
+      return { g, draw };
+    }
+    const lines = Array.from({length: 10}, makeLine);
+    lines.forEach(l => flow.addChild(l.g));
+
+    // Displacement + Bloom + Godray
+    const noiseTex = PIXI.Texture.from('assets/noise.png');
+    const noiseSprite = new PIXI.Sprite(noiseTex);
+    noiseSprite.texture.baseTexture.wrapMode = PIXI.WRAP_MODES.REPEAT;
+    const dispFilter = new PIXI.DisplacementFilter(noiseSprite, 24);
+    appBG.stage.addChild(noiseSprite);
+
+    let god = null;
+    try{
+      flow.filters = [ new (PIXI.filters?.AdvancedBloomFilter || PIXI.filters.AdvancedBloomFilter)({threshold:0.42, bloomScale:1.6, brightness:1.3, blur: 7}), dispFilter ];
+      god = new (PIXI.filters?.GodrayFilter || PIXI.filters.GodrayFilter)({ gain: 0.55, lacunarity: 2.6, angle: -26 * Math.PI/180, parallel: true });
+      appBG.stage.filters = [god];
+    }catch(e){ /* optional filters not available, continue without */ }
+
+    appBG.ticker.add((delta) => {
+      for (const s of stars.children){
+        s._tw += s._spd * delta;
+        s.alpha = 0.15 + Math.abs(Math.sin(s._tw))*0.45;
+      }
+      lines.forEach(l => l.draw());
+      noiseSprite.x += 0.7 * delta;
+      noiseSprite.y += 0.5 * delta;
+      if(god) god.time += 0.006 * delta;
+      dispFilter.scale.x = 18 + Math.sin(appBG.ticker.lastTime * 0.001) * 12;
+      dispFilter.scale.y = 18 + Math.cos(appBG.ticker.lastTime * 0.0013) * 12;
+    });
+
+    }
+
+// (explosion/lens-sweep moved to fx-modules.js)
+// === Settings modal logic ===
+const settingsModal = document.getElementById('settings-modal');
+const settingsInner = settingsModal?.querySelector('.settings-inner');
+const btnOpenSettings = document.getElementById('open-settings');
+const btnCloseSettings = document.getElementById('close-settings');
+
+function openSettings(){
+  settingsModal.classList.add('open');
+  settingsModal.setAttribute('aria-hidden', 'false');
+
+
+  // 轻微入场感
+  try{
+    gsap.killTweensOf(settingsInner);
+    gsap.fromTo(settingsInner, { y: 10, scale: 0.985, opacity: 0.98 }, { y: 0, scale: 1, opacity: 1, duration: 0.22, ease: "power2.out" });
+  }catch(e){}
+ try{ window.SFX && SFX.play('click'); }catch(e){}
+}
+function closeSettings(){
+  settingsModal.classList.remove('open');
+  settingsModal.setAttribute('aria-hidden', 'true');
+ try{ window.SFX && SFX.play('click'); }catch(e){}
+}
+
+btnOpenSettings?.addEventListener('click', (e)=>{ e.stopPropagation(); openSettings(); });
+btnCloseSettings?.addEventListener('click', (e)=>{ e.stopPropagation(); closeSettings(); });
+
+// === 简洁音效开关（仅影响“悬停”音效） ===
+window.__SFX_SIMPLE = false;
+const chkSfxSimple = document.getElementById('opt-sfx-simple');
+chkSfxSimple?.addEventListener('change', ()=>{
+  window.__SFX_SIMPLE = !!chkSfxSimple.checked;
+  try{ try{ window.SFX && SFX.play('click'); }catch(e){} }catch(e){}
+  try{ console.log('[SFX] simple mode =', window.__SFX_SIMPLE); }catch(e){}
+});
+
+
+settingsModal?.addEventListener('click', (e)=>{
+  // 点击空白处关闭（点击对话框内部不关闭）
+  if(e.target === settingsModal) closeSettings();
+});
+window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeSettings(); });
+  
+
+function renderDetail(card){
+  if(!card) return;
+  const clean = (s)=> (s??'').toString().replace(/[【】]/g,'').trim();
+  const typeText = (()=>{
+    const main = clean(card['主类型']);
+    const sub  = clean(card['特殊类型']);
+    return (sub && sub!=='-' && sub!=='无') ? `${main}|${sub}` : (main || '-');
+  })();
+  const markText = (()=>{
+    const t = (card['印记'] ?? '').toString().trim();
+    if(!t || t==='-') return '-';
+    if(t==='∞') return '4+';
+    const n = Number(t);
+    if(!isNaN(n)) return n>=4 ? '4+' : String(n);
+    return t;
+  })();
+
+  document.getElementById('dp-name').textContent = card['名称'] || '-';
+  document.getElementById('dp-code').textContent = clean(card['编号']) || '-';
+  document.getElementById('dp-eff').textContent  = (card['效果'] || '').toString();
+
+  const wrap = document.getElementById('dp-badges');
+  wrap.innerHTML = '';
+  [ typeText,
+    `属性：${clean(card['属性']) || '-'}`,
+    `等级：${clean(card['等级']) || '-'}`,
+    `印记：${markText}`
+  ].forEach(t=>{ const s=document.createElement('span'); s.className='dp-badge'; s.textContent=t; wrap.appendChild(s); });
+}
+</script>
+<div class="footer">
+  © 2025 Elm榆小猫 版权所有
+</div>
+<script>
+// Failsafe: bind settings modal after DOM ready, in a separate script tag so earlier errors won't block it
+window.addEventListener('DOMContentLoaded', () => {
+  const settingsModal = document.getElementById('settings-modal');
+  const settingsInner = settingsModal?.querySelector('.settings-inner');
+  const btnOpenSettings = document.getElementById('open-settings');
+  const btnCloseSettings = document.getElementById('close-settings');
+
+  function openSettings(){
+    if(!settingsModal) return;
+    settingsModal.classList.add('open');
+    settingsModal.setAttribute('aria-hidden', 'false');
+if (window.SFX && SFX.play) try{ window.SFX && SFX.play('click'); }catch(e){} 
+    try{
+      if(window.gsap && settingsInner){
+        gsap.killTweensOf(settingsInner);
+        gsap.fromTo(settingsInner, { y: 10, scale: 0.985, opacity: 0.98 }, { y: 0, scale: 1, opacity: 1, duration: 0.22, ease: "power2.out" });
+      }
+    }catch(e){}
+  }
+  function closeSettings(){
+    if(!settingsModal) return;
+    settingsModal.classList.remove('open');
+    settingsModal.setAttribute('aria-hidden', 'true');
+ if (window.SFX && SFX.play) try{ window.SFX && SFX.play('click'); }catch(e){}
+  }
+
+  btnOpenSettings?.addEventListener('click', (e)=>{ e.stopPropagation(); openSettings(); });
+  btnCloseSettings?.addEventListener('click', (e)=>{ e.stopPropagation(); closeSettings(); });
+  settingsModal?.addEventListener('click', (e)=>{ if(e.target === settingsModal) closeSettings(); });
+  window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeSettings(); });
+});
+</script>
+
+<script>
+(function(){
+  function positionDetailPanel(){
+    const img = document.querySelector('#image-modal img');
+    const panel = document.getElementById('detail-panel');
+    if(!img || !panel) return;
+    const rect = img.getBoundingClientRect();
+    const gap = 20;
+    panel.style.position = 'fixed';
+    panel.style.left = (rect.right + gap) + 'px';
+    panel.style.top = rect.top + 'px';
+    panel.style.right = 'auto';
+  }
+  const _open = window.openImageModal;
+  if(typeof _open === 'function'){
+    window.openImageModal = function(){
+      _open.apply(this, arguments);
+      setTimeout(positionDetailPanel, 50);
+      window.addEventListener('resize', positionDetailPanel);
+    };
+  }
+})();
+</script>
+<script src="leaves.js"></script>
+<audio id="bgm" src="music/bgm.mp3" preload="auto"></audio>
+<script>
+(function(){
+  const audioEl = document.getElementById('bgm');
+  if(!audioEl) return;
+
+  // === 偏好持久化 ===
+  const KEY_SOUND = 'pref_sound_on';
+  const KEY_VOL   = 'pref_sound_vol';
+
+  // 默认：开启声音、音量 0.6
+  let soundOn = JSON.parse(localStorage.getItem(KEY_SOUND) ?? 'true');
+  let volume  = parseFloat(localStorage.getItem(KEY_VOL) ?? '0.6');
+  if (isNaN(volume)) volume = 0.6;
+
+  // === 初始化 audio ===
+  audioEl.loop = true;
+  audioEl.volume = volume;
+
+  // UI 同步
+  const chk = document.getElementById('opt-sound');
+  const rng = document.getElementById('opt-volume');
+  const volText = document.getElementById('vol-text');
+
+  function syncUI(){
+    if(chk) chk.checked = !!soundOn;
+    if(rng) rng.value = String(volume);
+    if(volText) volText.textContent = Math.round(volume*100) + '%';
+  }
+  syncUI();
+
+  // === 播放控制 ===
+  async function tryPlay(){
+    if(!soundOn) return;
+    try{
+      await audioEl.play();
+    }catch(e){
+      // autoplay 被拦截：等用户任意交互后再播
+      const resume = ()=>{
+        if(!soundOn) return cleanup();
+        audioEl.play().catch(()=>{}); // 再尝试
+        cleanup();
+      };
+      const cleanup = ()=>{
+        window.removeEventListener('pointerdown', resume);
+        window.removeEventListener('keydown', resume);
+      };
+      window.addEventListener('pointerdown', resume, { once: true });
+      window.addEventListener('keydown', resume, { once: true });
+    }
+  }
+
+  function stop(){
+    audioEl.pause();
+    // 不重置 currentTime；保持循环位移自然
+  }
+
+  // 首次加载尝试自动播放
+  if(soundOn) tryPlay();
+
+  // === 事件绑定：设置项 ===
+  chk?.addEventListener('change', ()=>{
+    soundOn = chk.checked;
+    localStorage.setItem(KEY_SOUND, JSON.stringify(soundOn));
+    if(soundOn) tryPlay(); else stop();
+  });
+
+  rng?.addEventListener('input', ()=>{
+    volume = parseFloat(rng.value || '0.6');
+    if(isNaN(volume)) volume = 0.6;
+    audioEl.volume = volume;
+    volText.textContent = Math.round(volume*100) + '%';
+    localStorage.setItem(KEY_VOL, String(volume));
+  });
+
+  // === 可选：打开设置面板时同步一次（防止别处改了值） ===
+  document.getElementById('open-settings')?.addEventListener('click', ()=>{
+    syncUI();
+  });
+
+  // === 可选：页面可见时如果开启声音而且暂停了，轻尝试一次 ===
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible' && soundOn && audioEl.paused){
+      tryPlay();
+    }
+  });
+
+})();
+</script>
+<script>
+(function(){
+  // ====== 偏好键 & 默认 ======
+  const KEY_FX     = 'pref_fx_on';
+  const KEY_LEAVES = 'pref_leaves_on';
+  const KEY_SHOW   = 'pref_card_show_flags'; // {name, code, meta, eff}
+
+  let prefs = {
+    fx: JSON.parse(localStorage.getItem(KEY_FX) ?? 'true'),
+    leaves: JSON.parse(localStorage.getItem(KEY_LEAVES) ?? 'true'),
+    show: (()=>{ try{return JSON.parse(localStorage.getItem(KEY_SHOW))||{};}catch(e){return{};} })()
+  };
+  prefs.show = { name:true, code:true, meta:true, eff:true, ...prefs.show };
+
+  // ====== 取 UI 元件 ======
+  const elFX   = document.getElementById('opt-fx');
+  const elLeaf = document.getElementById('opt-leaves');
+  const elName = document.getElementById('show-name');
+  const elCode = document.getElementById('show-code');
+  const elMeta = document.getElementById('show-meta');
+  const elEff  = document.getElementById('show-eff');
+
+  function syncUI(){
+    if(elFX)   elFX.checked   = !!prefs.fx;
+    if(elLeaf) elLeaf.checked = !!prefs.leaves;
+    if(elName) elName.checked = !!prefs.show.name;
+    if(elCode) elCode.checked = !!prefs.show.code;
+    if(elMeta) elMeta.checked = !!prefs.show.meta;
+    if(elEff)  elEff.checked  = !!prefs.show.eff;
+  }
+
+  // ====== Body 类切换（显示项 & fx/leaves 可视）======
+  function applyBodyClasses(){
+    document.body.classList.toggle('fx-off',       !prefs.fx);
+    document.body.classList.toggle('leaves-off',   !prefs.leaves);
+    document.body.classList.toggle('no-name',      !prefs.show.name);
+    document.body.classList.toggle('no-code',      !prefs.show.code);
+    document.body.classList.toggle('no-meta',      !prefs.show.meta);
+    document.body.classList.toggle('no-eff',       !prefs.show.eff);
+  }
+
+  // ====== FXModules 软开关（不破坏你的 hover 上移动画）======
+  let fxReady = false;
+  let orig = { apply:null, explosion:null };
+  function captureFX(){
+    if(fxReady) return;
+    if(!window.FXModules) return; // 等待后续再捕获
+    // 只在第一次捕获
+    if(typeof window.FXModules.applyToCard === 'function') orig.apply = window.FXModules.applyToCard.bind(window.FXModules);
+    if(typeof window.FXModules.explosion  === 'function')  orig.explosion = window.FXModules.explosion.bind(window.FXModules);
+    fxReady = true;
+  }
+
+  function applyFXSwitch(){
+    captureFX();
+    if(!fxReady) return; // 还没加载 fx-modules.js，稍后再调用
+    if(prefs.fx){
+      // 恢复原函数
+      if(orig.apply)    window.FXModules.applyToCard = orig.apply;
+      if(orig.explosion)window.FXModules.explosion   = orig.explosion;
+    }else{
+      // 关闭：替换为 no-op
+      window.FXModules.applyToCard = function(){ /* no-op when fx off */ };
+      window.FXModules.explosion   = function(){ /* no-op when fx off */ };
+    }
+  }
+
+  // 当 FX 从关 -> 开 时，重新渲染，让每张卡重新初始化 FX（不影响普通 hover）
+  function refreshCardsIfNeeded(prevFX, nextFX){
+    if(prevFX === false && nextFX === true){
+      try{ window.displayCards?.(); }catch(e){}
+    }
+  }
+
+  // ====== 落叶：暂停/恢复 + 显隐画布 ======
+  function applyLeaves(){
+    // 可视层：用 body 类控制（CSS 已隐藏画布）
+    // 逻辑层：调用 pause/resume
+    try{
+      if(prefs.leaves){
+        window.LeafFX?.resume?.();
+        const c = document.getElementById('leaf-fx-canvas-v3');
+        if(c) c.style.display = ''; // 显示
+      }else{
+        window.LeafFX?.pause?.();
+        const c = document.getElementById('leaf-fx-canvas-v3');
+        if(c) c.style.display = 'none'; // 隐藏
+      }
+    }catch(e){}
+  }
+
+  // ====== 初始化 ======
+  function applyAll(prevFX){
+    applyBodyClasses();
+    applyFXSwitch();
+    applyLeaves();
+    // 如果 fx 从关->开，触发一次重渲染初始化 FX
+    refreshCardsIfNeeded(prevFX, prefs.fx);
+  }
+
+  // 先同步 UI，再应用状态
+  syncUI();
+  applyAll(/* prevFX */ prefs.fx);
+
+  // === 绑定事件 ===
+  elFX?.addEventListener('change', ()=>{
+    const prevFX = prefs.fx;
+    prefs.fx = !!elFX.checked;
+    localStorage.setItem(KEY_FX, JSON.stringify(prefs.fx));
+    applyAll(prevFX);
+  });
+
+  elLeaf?.addEventListener('change', ()=>{
+    prefs.leaves = !!elLeaf.checked;
+    localStorage.setItem(KEY_LEAVES, JSON.stringify(prefs.leaves));
+    applyAll();
+  });
+
+  function saveShow(){
+    localStorage.setItem(KEY_SHOW, JSON.stringify(prefs.show));
+    applyAll();
+  }
+  elName?.addEventListener('change', ()=>{ prefs.show.name = !!elName.checked; saveShow(); });
+  elCode?.addEventListener('change', ()=>{ prefs.show.code = !!elCode.checked; saveShow(); });
+  elMeta?.addEventListener('change', ()=>{ prefs.show.meta = !!elMeta.checked; saveShow(); });
+  elEff ?.addEventListener('change', ()=>{ prefs.show.eff  = !!elEff.checked;  saveShow(); });
+
+  // 打开设置时同步一次（防止外面改了）
+  document.getElementById('open-settings')?.addEventListener('click', syncUI);
+
+  // ====== 兼容：fx-modules.js 可能晚于本脚本加载，轮询捕获一次后立即应用 ======
+  const fxPoll = setInterval(()=>{
+    if(fxReady) { clearInterval(fxPoll); return; }
+    captureFX();
+    if(fxReady){
+      applyFXSwitch();
+      clearInterval(fxPoll);
+    }
+  }, 120);
+
+  // ====== 保险：每次你的 displayCards 渲染后，重新应用 body 类与 FX 开关 ======
+  // 不覆盖原函数；如果需要，你也可以手动在 displayCards 末尾调用 window.__applyUIControls?.()
+  window.__applyUIControls = applyAll;
+
+  // DOM 变更（卡列表刷新）时也应用一次（防止外部脚本重建节点）
+  try{
+    const grid = document.getElementById('card-grid');
+    if(grid){
+      const mo = new MutationObserver(()=> applyAll());
+      mo.observe(grid, { childList:true, subtree:false });
+    }
+  }catch(e){}
+})();
+</script>
+<script>
+// === SoundManager：交互音效（SFX）统一管理 ===
+(function(){
+  // 资源文件名（请把音频放到 /sounds/ 下；若你用的是 /mnt/data/ 也可把路径替换掉）
+  const FILES = {
+    click:   'sounds/click.wav',   // 按钮：click
+    card:    'sounds/card.wav',    // 放大弹窗：card
+    earth:   'sounds/earth.wav',
+    water:   'sounds/water.wav',
+    wind:    'sounds/wind.wav',
+    fire:    'sounds/fire.wav',
+    light:   'sounds/light.wav',
+    dark:    'sounds/dark.wav',
+    rainbow: 'sounds/rainbow.wav'
+  };
+
+  const KEY_SFX_ON  = 'pref_sfx_on';
+  const KEY_SFX_VOL = 'pref_sfx_vol';
+
+  let enabled = JSON.parse(localStorage.getItem(KEY_SFX_ON) ?? 'true');
+  let volume  = parseFloat(localStorage.getItem(KEY_SFX_VOL) ?? '0.8');
+  if (isNaN(volume)) volume = 0.8;
+
+  // 为了防止快速点击串音：每个音效做个小池子（4 路）
+  const POOL_SIZE = 4;
+  const pool = {}; // name -> [Audio, Audio, ...]
+  const idx  = {}; // name -> current index
+
+  function makeAudio(src){
+    const a = new Audio(src);
+    a.preload = 'auto';
+    a.volume = volume;
+    return a;
+  }
+
+  for(const [name, src] of Object.entries(FILES)){
+    pool[name] = Array.from({length: POOL_SIZE}, ()=>makeAudio(src));
+    idx[name] = 0;
+  }
+
+  function setVolume(v){
+    volume = Math.max(0, Math.min(1, v || 0));
+    for(const list of Object.values(pool)){
+      for(const a of list){ a.volume = volume; }
+    }
+    localStorage.setItem(KEY_SFX_VOL, String(volume));
+  }
+
+  function setEnabled(v){
+    enabled = !!v;
+    localStorage.setItem(KEY_SFX_ON, JSON.stringify(enabled));
+  }
+
+  function play(name){
+    if(!enabled) return;
+    const list = pool[name];
+    if(!list || !list.length) return;
+    const i = (idx[name] = (idx[name] + 1) % list.length);
+    const a = list[i];
+    try{ a.currentTime = 0; a.play().catch(()=>{}); }catch(e){}
+  }
+
+  // 悬停节流（避免鼠标抖动狂触发）
+  const lastPlayAt = {};
+  function playThrottled(name, gapMs=180){
+    const now = performance.now();
+    if((lastPlayAt[name] || 0) + gapMs > now) return;
+    lastPlayAt[name] = now;
+    play(name);
+  }
+
+  // 属性名映射（【】去掉，转英文 key）
+  function mapAttrToKey(attrRaw){
+    const a = (attrRaw||'').toString().replace(/[【】]/g,'').trim();
+    switch(a){
+      case '地': return 'earth';
+      case '水': return 'water';
+      case '风': return 'wind';
+      case '火': return 'fire';
+      case '光': return 'light';
+      case '暗': return 'dark';
+      case '全部':return 'rainbow';
+      default:
+        return null;
+    }
+  }
+
+  // 暴露到全局
+  window.SFX = { play, playThrottled, setEnabled, setVolume,
+                 isEnabled: ()=>enabled, getVolume: ()=>volume, mapAttrToKey };
+})();
+</script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  const sfxToggle   = document.getElementById('opt-sfx');
+  const sfxRange    = document.getElementById('opt-sfx-vol');
+  const sfxVolText  = document.getElementById('sfx-vol-text');
+
+  // 初始同步 UI
+  if(sfxToggle) sfxToggle.checked = !!SFX.isEnabled();
+  if(sfxRange){
+    sfxRange.value = String(SFX.getVolume());
+    if(sfxVolText) sfxVolText.textContent = Math.round(SFX.getVolume()*100) + '%';
+  }
+
+  // 开关
+  sfxToggle?.addEventListener('change', () => {
+    SFX.setEnabled(sfxToggle.checked);
+    // 给点反馈
+    if(sfxToggle.checked) try{ window.SFX && SFX.play('click'); }catch(e){}
+  });
+
+  // 音量
+  sfxRange?.addEventListener('input', () => {
+    const v = parseFloat(sfxRange.value || '0.8');
+    SFX.setVolume(isNaN(v) ? 0.8 : v);
+    if(sfxVolText) sfxVolText.textContent = Math.round(SFX.getVolume()*100) + '%';
+  });
+
+  // （可选）为设置面板内其它开关/按钮统一加“click 声”
+  document.getElementById('settings-modal')?.addEventListener('click', (e)=>{
+    // 只有在点到 input[type=checkbox] 或 button 时播
+    const t = e.target;
+    if(t && (t.tagName==='BUTTON' || (t.tagName==='INPUT' && t.type==='checkbox'))){
+      try{ window.SFX && SFX.play('click'); }catch(e){}
+    }
+  });
+});
+</script>
+
+<!-- 竖屏提示遮罩（只在手机竖屏时显示） -->
+<div id="rotate-hint" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.82);z-index:10000;">
+  <div style="text-align:center;color:#fff;padding:16px;">
+    <div style="font-size:16px;margin-bottom:10px;">为更好体验，请将手机横向放置</div>
+    <button id="try-landscape" style="padding:10px 14px;border:1px solid #B08D57;background:rgba(0,0,0,.25);color:#fff;border-radius:10px;cursor:pointer;">
+      进入
+    </button>
+    <div style="font-size:12px;opacity:.8;margin-top:8px;">推荐使用电脑访问本页面（移动设备功能和显示效果可能受限）</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const hint = document.getElementById('rotate-hint');
+  if(!hint) return;
+
+  function isPortrait(){
+    return window.matchMedia("(orientation: portrait)").matches;
+  }
+  function maybeShow(){
+    // 仅在小屏（≤820px）且竖屏时显示
+    const small = window.matchMedia("(max-width: 820px)").matches;
+    hint.style.display = (small && isPortrait()) ? "flex" : "none";
+  }
+  maybeShow();
+  window.addEventListener('orientationchange', maybeShow);
+  window.matchMedia("(orientation: portrait)").addEventListener?.("change", maybeShow);
+  window.addEventListener('resize', maybeShow);
+
+  // 尝试全屏 + 锁横屏（部分浏览器/平台可能失败）
+  async function tryLock(){
+    try{
+      const el = document.documentElement;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape');
+      }
+    }catch(e){ /* 忽略 */ }
+    finally{ maybeShow(); }
+  }
+  document.getElementById('try-landscape')?.addEventListener('click', tryLock, {passive:true});
+})();
+// 检测是否是手机（触摸设备且屏幕宽度 <= 820px）
+function isMobile() {
+  return window.matchMedia("(max-width: 820px)").matches && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+}
+
+// 如果是手机，默认勾选简化音效
+document.addEventListener('DOMContentLoaded', function(){
+  if (isMobile()) {
+    const simpleSfxCheckbox = document.getElementById('opt-sfx-simple');
+    if (simpleSfxCheckbox) {
+      simpleSfxCheckbox.checked = true;
+      window.__SFX_SIMPLE = true; // 同步设置全局变量
+    }
+  }
+});
+// —— 判定：仅手机触屏 + 小屏
+function isMobileTouch(){
+  return window.matchMedia("(max-width: 820px)").matches &&
+         (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+}
+// 竖屏？
+function isPortrait(){
+  return window.matchMedia("(orientation: portrait)").matches;
+}
+
+const rotateHint = document.getElementById('rotate-hint');
+const tryLandscapeBtn = document.getElementById('try-landscape');
+
+let rotateHintDismissed = false; // 本次会话已“进入”
+
+function updateRotateHint(){
+  if (!rotateHint) return;
+  // 仅：手机 + 竖屏 + 未手动进入 时显示
+  if (isMobileTouch() && isPortrait() && !rotateHintDismissed) {
+    rotateHint.style.display = 'flex';  // 让遮罩用 flex 居中
+  } else {
+    rotateHint.style.display = 'none';
+  }
+}
+
+// 点击任意位置（包括按钮）即可进入
+function closeRotateHint(){
+  rotateHintDismissed = true;
+  rotateHint.style.display = 'none';
+  // 如果你进入时还要做别的初始化，在这里加
+}
+
+// 绑定点击
+if (rotateHint) {
+  rotateHint.addEventListener('click', closeRotateHint);
+}
+if (tryLandscapeBtn) {
+  tryLandscapeBtn.addEventListener('click', closeRotateHint);
+}
+
+// 初次 & 方向/尺寸变化时检查
+window.addEventListener('load', updateRotateHint);
+window.addEventListener('resize', updateRotateHint);
+window.addEventListener('orientationchange', updateRotateHint);
+
+
+// —— 判定：是否手机触屏（≤820px）
+function isMobileTouch(){
+  return window.matchMedia("(max-width: 820px)").matches &&
+         (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
+}
+
+// 手机版进入：默认关闭“信息”四项
+document.addEventListener('DOMContentLoaded', function(){
+  if (!isMobileTouch()) return;
+
+  const body = document.body;
+  const nameCb = document.getElementById('show-name');
+  const codeCb = document.getElementById('show-code');
+  const metaCb = document.getElementById('show-meta');
+  const effCb  = document.getElementById('show-eff');
+
+  // 取消勾选（如果你有绑定监听，这里等价于“关闭”）
+  if (nameCb) nameCb.checked = false;
+  if (codeCb) codeCb.checked = false;
+  if (metaCb) metaCb.checked = false;
+  if (effCb)  effCb.checked  = false;
+
+  // 直接通过 body 类生效（与你现有 CSS 规则一致）
+  body.classList.add('no-name','no-code','no-meta','no-eff');
+});
+
+
+/* 仅在“手机横屏”启用：把 aside.sidebar 内容装进 .sidebar-scroll，让按钮固定在侧栏底部 */
+(function(){
+  const mqWidth = window.matchMedia('(max-width: 820px)');
+  const mqLand  = window.matchMedia('(orientation: landscape)');
+  const sidebar = document.querySelector('aside.sidebar');
+  if (!sidebar) return;
+
+  let scrollBox = null;
+  let applied = false;
+
+  function applyLandscape(){
+    if (applied) return;
+    const footer = sidebar.querySelector(':scope > .sidebar-footer');
+    if (!footer) return;
+
+    // 已有就复用；没有就创建
+    scrollBox = sidebar.querySelector(':scope > .sidebar-scroll');
+    if (!scrollBox) {
+      scrollBox = document.createElement('div');
+      scrollBox.className = 'sidebar-scroll';
+      // 把除 footer 之外的兄弟都搬进去
+      Array.from(sidebar.children).forEach(n => {
+        if (n !== footer) scrollBox.appendChild(n);
+      });
+      sidebar.insertBefore(scrollBox, footer);
+    }
+    applied = true;
+  }
+
+  function revertToFlow(){
+    if (!applied) return;
+    const footer = sidebar.querySelector(':scope > .sidebar-footer');
+    const box = sidebar.querySelector(':scope > .sidebar-scroll');
+    if (box && footer){
+      Array.from(box.childNodes).forEach(n => sidebar.insertBefore(n, footer));
+      box.remove();
+    }
+    scrollBox = null;
+    applied = false;
+  }
+
+  function update(){
+    if (mqWidth.matches && mqLand.matches) {
+      applyLandscape();   // 手机横屏：启用“内容滚+按钮固定”
+    } else {
+      revertToFlow();     // 手机竖屏或桌面：回归正常流式
+    }
+  }
+
+  update();
+  (mqWidth.addEventListener || mqWidth.addListener).call(mqWidth, 'change', update);
+  (mqLand.addEventListener  || mqLand.addListener ).call(mqLand,  'change', update);
+  window.addEventListener('resize', update);
+  window.addEventListener('orientationchange', update);
+})();
+// === Mobile 首次进入：默认关闭 信息四项（名称/编号/数据/效果）===
+// 仅设置“初始值”：勾选状态会显示为关，并触发既有逻辑；之后完全按用户操作为准。
+(function(){
+  const isMobile = window.matchMedia("(max-width: 820px), (hover: none), (pointer: coarse)").matches;
+  if (!isMobile) return;
+
+  const MAP = [
+    { id: "show-name", cls: "no-name" },
+    { id: "show-code", cls: "no-code" },
+    { id: "show-meta", cls: "no-meta" },
+    { id: "show-eff",  cls: "no-eff"  },
+  ];
+
+  function setInitialOff(){
+    // 1) 取消勾选，让设置界面“真的”为关闭
+    MAP.forEach(({id})=>{
+      const el = document.getElementById(id);
+      if (el) {
+        el.checked = false;
+        // 2) 触发 change，走你现有的事件逻辑（如有监听会自动应用到页面）
+        try { el.dispatchEvent(new Event('change', { bubbles:true })); } catch(e){}
+      }
+    });
+
+    // 3) 兜底：若没有绑定监听，则直接加样式类生效
+    MAP.forEach(({cls})=> document.body.classList.add(cls));
+  }
+
+  // DOM 就绪后设置一次“默认关闭”
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setInitialOff, { once:true });
+  } else {
+    setInitialOff();
+  }
+})();
+
+</script>
+
+</body>
+</html>

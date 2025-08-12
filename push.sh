@@ -6,7 +6,7 @@ echo "============================="
 
 COMMIT_MESSAGE="auto: update"
 BRANCH_NAME="master"
-GITHUB_REMOTE="github"
+GITHUB_REMOTE="origin"
 
 echo "=== Starting Git Auto Push Script ==="
 echo "Commit message: $COMMIT_MESSAGE"
